@@ -1,0 +1,140 @@
+version: '3.5'
+services:
+    app-apache:
+          container_name: app-logic
+          build:
+              context: ./
+              dockerfile: Dockerfile
+          depends_on:
+              - mysql-db
+              - keyrock
+          volumes:
+              - ./src:/var/www/html/
+          networks:
+              intranet1:
+                  ipv4_address: 172.18.1.4
+          ports:
+             - 80:80
+          expose:
+             - 80    
+
+    keyrock:
+        image: fiware/idm:7.6.0
+        container_name: fiware-keyrock
+        hostname: keyrock
+        networks:
+            intranet1:
+                ipv4_address: 172.18.1.5
+        depends_on:
+            - mysql-db
+        ports:
+            - '3005:3005'
+            - '443:443'
+        environment:
+            - DEBUG=idm:*
+            - IDM_DB_HOST=mysql-db
+            - IDM_HOST=http://localhost:3005
+            - IDM_PORT=3005
+            - IDM_DB_PASS=secret
+            - IDM_DB_USER=root
+            - IDM_ADMIN_USER=alexandra
+            - IDM_ADMIN_EMAIL=atsipouraki@tuc.gr
+            - IDM_ADMIN_PASS=1234
+            
+
+    mysql-db:
+        restart: always
+        image: mysql:5.7
+        hostname: mysql-db
+        container_name: db-mysql
+        expose:
+            - '3306'
+        ports:
+            - '3306:3306'
+        networks:
+            intranet1:
+                ipv4_address: 172.18.1.6
+        environment:
+            # Development use only
+            # Use Docker Secrets for Sensitive Data
+            - 'MYSQL_ROOT_PASSWORD=secret'
+            - 'MYSQL_ROOT_HOST=172.18.1.5'
+        volumes:
+            - ./mysql-db:/var/lib/mysql
+
+    storage:
+        container_name: storage
+        hostname: storage
+        build:
+          context: ./
+          dockerfile: Dockerfile_storage
+        networks:
+           intranet1:
+              ipv4_address: 172.18.1.8
+        expose:
+            - 80
+        
+
+    storage-proxy:
+        image: fiware/pep-proxy
+        container_name: storage-proxy
+        hostname: storage-proxy
+        networks:
+            intranet1:
+              ipv4_address: 172.18.1.11
+        ports:
+          - 1028:1028
+        expose:
+          - 1028
+        depends_on:
+          - keyrock
+        environment:
+          - PEP_PROXY_APP_HOST=storage
+          - PEP_PROXY_APP_PORT=80
+          - PEP_PROXY_PORT=1028
+          - PEP_PROXY_IDM_HOST=keyrock
+          - PEP_PROXY_HTTPS_ENABLED=false
+          - PEP_PROXY_AUTH_ENABLED=false
+          - PEP_PROXY_IDM_SSL_ENABLED=false
+          - PEP_PROXY_IDM_PORT=3005
+          - PEP_PROXY_APP_ID=24aa07da-84cd-4ddd-9406-546169927283
+          - PEP_PROXY_USERNAME=pep_proxy_4751468c-7b4f-4ef1-a993-4e3c37e1201f
+          - PEP_PASSWORD=pep_proxy_ea033ac0-4bb0-4efb-a522-537f9e6e4036
+          - PEP_PROXY_PDP=idm
+
+    mongo:
+        image: mongo:latest
+        container_name : mongo_db
+        restart: always
+        volumes:
+            - ./mongo_db:/data/db
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: root
+        ports: 
+            - 27018:27017
+        expose:
+            - 27018
+        networks:
+            intranet1:
+               ipv4_address: 172.18.1.9
+    phpmyadmin:
+        container_name: sql-admin
+        image: phpmyadmin/phpmyadmin
+        ports:
+            - '8080:80'
+        restart: always
+        environment:
+          PMA_HOST: mysql-db
+        depends_on:
+            - mysql-db
+        networks:
+           intranet1:
+              ipv4_address: 172.18.1.7
+
+networks:
+    intranet1:
+        ipam:
+            config:
+                - subnet: 172.18.1.0/24
+                  gateway: 172.18.1.1
